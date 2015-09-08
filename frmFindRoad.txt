@@ -1,0 +1,275 @@
+
+
+'  -----------------------------------------------------------------
+'                            City of Durham
+'                           Public Works GIS
+'  -----------------------------------------------------------------
+'
+'                         frmFindRoad (20120716)
+'
+'  PURPOSE:
+'
+'  Custom form to find and zoom to specific street within the road
+'  layer.  Created as a more streamlined alternative to the standard ArcMap find tool.
+'
+'  -----------------------------------------------------------------
+'  INPUT(S):
+'
+'  Road layer must be loaded in the mxd.
+'
+'  -----------------------------------------------------------------
+'  NOTES:
+'
+'  Searches for exact name of layer.
+'  20130212-doig: updated code so that listbox and text box are cleared when you quit tool.
+'  20150908-doig: checked code before uploading to GitHub.
+'  -----------------------------------------------------------------
+'  INSTALLATION INSTRUCTIONS:
+'
+'  If the code is not provided as part of an ArcMap "mxd" document:
+'
+'  1).  Import the FindRoad form.
+'
+'  2).  Create a button called "FindRoad".
+'
+'  3).  On the button set up the "Click" event
+'       as follows:
+'
+'       Private Sub RoadFinder_Click()
+'            Load frmFindRoad
+'
+'            frmFindRoad.Show
+'
+'        End Sub
+'
+'  =================================================================
+
+Private Function GetLayer(layerName As String) As IFeatureLayer
+    
+    Dim pEditLayers As IEditLayers
+    Dim pFeatureLayer As IFeatureLayer
+    Dim pFeatureClass As IFeatureClass
+    Dim pFeature As IFeature
+    Dim pPointCollection As IPointCollection
+    Dim pPoint1 As IPoint
+    Dim pPoint2 As IPoint
+    Dim pZA As IZAware
+    Dim pRowSubtypes As IRowSubtypes
+    Dim pMxDocument As IMxDocument
+    Dim pMap As IMap
+    Dim pEnumLayer As IEnumLayer
+    Dim pLayer As ILayer
+    Dim pID As New UID
+    Dim node1 As String
+    Dim node2 As String
+    Dim i As Long
+    Dim j As Long
+    Dim x As Long
+    Dim pEnumRelClass As IEnumRelationshipClass
+    Dim pRelClass As IRelationshipClass
+    Dim pObjectClass As IObjectClass
+    Dim pTable As ITable
+    Dim pRow As IRow
+    Dim pDataset As IDataset
+    Dim xFeatureClass As IFeatureClass
+    'Dim pFeatureLayer As IFeatureLayer
+    Dim pEditor As IEditor
+    
+    
+    'MsgBox "GetLayer"
+    
+    
+    Set pMxDocument = Application.Document
+    Set pMap = pMxDocument.FocusMap
+    
+    'GetLayer = Nothing
+    
+    
+    pID = "{E156D7E5-22AF-11D3-9F99-00C04F6BC78E}" 'IGeoFeatureLayer
+    Set pEnumLayer = pMap.Layers(pID, True)
+    pEnumLayer.Reset
+    Set pLayer = pEnumLayer.Next
+    Set pFeatureLayer = pLayer
+    
+    
+    Do While Not pLayer Is Nothing
+        If pLayer.valid = True Then
+            Set xFeatureClass = pFeatureLayer.FeatureClass
+            Set pDataset = xFeatureClass
+           ' MsgBox pLayer.Name & " : " & pDataset.Name
+            
+            If UCase(pDataset.Name) = UCase(layerName) Then
+                'MsgBox "GOT IT"
+                Set GetLayer = pFeatureLayer
+                Exit Function
+            End If
+        End If
+        
+       
+        Set pLayer = pEnumLayer.Next
+        Set pFeatureLayer = pLayer
+    Loop
+    
+    
+
+End Function
+
+
+Private Sub CmdQuit_Click()
+ frmFindRoad.ListBox1.Clear
+ frmFindRoad.TxtName = Null
+ frmFindRoad.Hide
+End Sub
+
+Private Sub CmdSearch_Click()
+
+    Dim RoadName As String
+
+    RoadName = UCase(frmFindRoad.TxtName.value)
+
+          
+    'MsgBox RoadName
+
+    Dim pMxDoc As IMxDocument
+    Dim pMap As IMap
+    Dim pActiveView As IActiveView
+    Dim pFeatureLayer As IFeatureLayer
+    Dim PFeatureSelection As IFeatureSelection
+    Dim pQueryFilter As IQueryFilter
+    Dim pRow As IRow
+    Dim pFeature As IFeature
+    Dim pFeatureCursor As IFeatureCursor
+    Dim pCursor As ICursor
+    Dim pLayer As ILayer
+
+    Set pMxDoc = Application.Document
+    Set pMap = pMxDoc.FocusMap
+    Set pActiveView = pMap
+    Set pFeatureLayer = GetLayer("gis_data.A1.Roads") 'Replace the layer name with the feature class you wish to search.
+
+    'If Not TypeOf pMap.Layer(0) Is IFeatureLayer Then Exit Sub
+
+    'Set pFeatureLayer = pMap.Layer(0)
+    Set PFeatureSelection = pFeatureLayer 'QI
+
+    'Create the query filter
+
+    Query = "ROAD_NAME = " & " '" & RoadName & "'"
+
+    'MsgBox Query
+
+    Set pQueryFilter = New QueryFilter
+    pQueryFilter.WhereClause = Query
+
+    'Invalidate only the selection cache
+    'Flag the original selection
+    pActiveView.PartialRefresh esriViewGeoSelection, Nothing, Nothing
+    'Perform the selection
+    PFeatureSelection.SelectFeatures pQueryFilter, esriSelectionResultNew, False
+
+    'MsgBox PFeatureSelection.SelectionSet.Count
+
+    If pMap.SelectionCount < 1 Then
+        MsgBox "No matching road found. Do NOT include 'Rd.,' 'St.,' or other suffix."
+    End If
+
+    'Flag the new selection
+    pActiveView.PartialRefresh esriViewGeoSelection, Nothing, Nothing
+
+    Dim pSelectionSet As ISelectionSet
+    Set pSelectionSet = PFeatureSelection.SelectionSet
+
+    pSelectionSet.Search Nothing, True, pFeatureCursor
+
+    'loop through the selected records and add to a list box
+    'Set pFeature = pFeatureCursor.NextFeature
+    'Do While Not pFeature Is Nothing
+
+    'Set pFeatureCursor = PFeatureSelection.SelectionSet
+
+    'added next set of code in attempt to create multiple field list box
+    Set pFeature = pFeatureCursor.NextFeature
+
+    Dim intCounter As Integer
+    intCounter = 0
+    
+        Do While Not pFeature Is Nothing
+        
+        frmFindRoad.ListBox1.AddItem
+        frmFindRoad.ListBox1.List(intCounter, 0) = pFeature.value(0)
+        frmFindRoad.ListBox1.List(intCounter, 1) = pFeature.value(42) 'Road Name
+            If IsNull(pFeature.value(40)) Then
+            frmFindRoad.ListBox1.List(intCounter, 2) = "Unknown Intersection"
+            Else
+            frmFindRoad.ListBox1.List(intCounter, 2) = pFeature.value(40) 'Road intersection
+            End If
+            
+        Set pFeature = pFeatureCursor.NextFeature
+        intCounter = intCounter + 1
+                
+    Loop
+
+    Set pFeatureCursor = Nothing
+    Set pFeature = Nothing
+    Set pFeatureLayer = Nothing
+    Set pLayer = Nothing
+    Set pMap = Nothing
+    Set pMxDoc = Nothing
+
+
+    PFeatureSelection.Clear
+
+End Sub
+
+Private Sub TxtName_KeyPress(ByVal KeyAscii As MSForms.ReturnInteger)
+    If KeyAscii = 13 Then
+    'do the calculations
+    End If
+End Sub
+
+Private Sub CmdZoom_Click()
+    Dim pMxDoc As IMxDocument
+    Dim pMap As IMap
+    Dim pActiveView As IActiveView
+    Dim pFeatureLayer As IFeatureLayer
+    Dim PFeatureSelection As IFeatureSelection
+    Dim pQueryFilter As IQueryFilter
+
+    Set pMxDoc = Application.Document
+    Set pMap = pMxDoc.FocusMap
+    Set pActiveView = pMap
+
+    Dim pCmdItem As ICommandItem
+
+        'MsgBox Me.ListBox1.Value
+
+    Set pFeatureLayer = GetLayer("gis_data.A1.Roads")
+    'Set pFeatureLayer = m_pFeatureLayer
+    Set PFeatureSelection = pFeatureLayer
+
+    ' NOW GET THE FEATURE CLASS
+    Dim pFeatureClass As IFeatureClass
+    Set pFeatureClass = pFeatureLayer.FeatureClass
+
+    ' THEN GET THE FEATURE USING THE OID
+    Dim pFeature As IFeature
+    Set pFeature = pFeatureClass.GetFeature(ListBox1.value)
+
+    'MsgBox pFeature.OID
+
+    ' THEN GET THE EXTENT OF THE FEATURE
+    Dim pEnvelope As IEnvelope
+    Set pEnvelope = pFeature.Extent
+
+    pActiveView.Extent = pEnvelope
+    pActiveView.Refresh
+
+
+    Exit Sub
+
+    
+    'Set pCmdItem = Application.Document.CommandBars.Find(ArcID.Query_ZoomToSelected)
+    'pCmdItem.Execute
+End Sub
+
+
